@@ -46,3 +46,17 @@ function ipToHex(ip) {
   return result;
 }
 
+/**
+ * 
+ * @returns {import("./src/protocol.d").JsonDeviceMsg} data
+ */
+function test () {
+  return {
+    id: 0,
+    isAck: false,
+    cmd: "dev",
+    dev: {
+      cmd: "create"
+    }
+  }
+}
