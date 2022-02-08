@@ -8,22 +8,20 @@ Uses [libtuntap](https://github.com/LaKabane/libtuntap) as a shared c library
 And [tiny-json](https://github.com/rafagafe/tiny-json) as a json parser
 
 ## State
-Unusable
+Partially functional
 
 Implemented so far:
 - json parsing from stdin
+- json stringify lib impl
+- tun device create/start over json
 - tun device created / functional / tested
-- able to grab origin and destination IP addresses of packets in english
+- origin and destination IP packets decoded
 
 ## TODO
 - json command listening
-  - create device
-  - init device
-  - start device
   - pub/sub aka read device
   - destroy device
   - write to device
-  - graceful shutdown
 - json output
   - log info
   - notify device events
