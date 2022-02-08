@@ -1,5 +1,5 @@
 
-export type CmdJson = "dev"|"data"|"die";
+export type CmdJson = "dev"|"data"|"die"|"log";
 export type CmdDev = "up"|"down"|"create"|"destroy"|"sub"|"unsub";
 
 export type IdDev = number;
@@ -35,6 +35,13 @@ export interface JsonDataMsg extends JsonMsg {
   }
 }
 
+export interface JsonLogMsg extends JsonMsg {
+  cmd: "log",
+  log: {
+    data?: string;
+    error?: string;
+  }
+}
 
 /**
  * Example:

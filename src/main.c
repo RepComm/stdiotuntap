@@ -7,6 +7,7 @@
 
 #include "./libtuntap/tuntap.h"
 #include "./tiny-json/tiny-json.c"
+#include "./jsonwrite.c"
 #include "./b64.c/b64.h"
 
 #define dev struct device *
@@ -22,6 +23,27 @@ writeout (const char *__restrict __fmt, ...) {
   fflush(stdout);
   return result;
 }
+
+struct JsonMsg {
+  bool isAck;
+  int id;
+  char * cmd;
+};
+#define JsonMsgP struct JsonMsg *
+
+// int JsonMsgToSerialize (char * dest, JsonMsgP src) {
+//   char* p = dest;                       // p always points to the null character
+//   p = json_objOpen( p, NULL );          // --> {\0
+//   p = json_int( p, "isAck", src->isAck ); // --> {"temp":22,\0
+//   p = json_int( p, "id", src->id );   // --> {"temp":22,"hum":45,\0
+//   p = json_str( p, "cmd", src->cmd );
+
+//   //TODO - iterate based on cmd value
+
+//   p = json_objClose( p );               // --> {"temp":22,"hum":45},\0
+//   p = json_end( p );                    // --> {"temp":22,"hum":45}\0
+//   return p - dest;       
+// }
 
 void _tuntap_log (int a, const char * b) {
   // writeout("%s", (char *)b);
@@ -337,6 +359,10 @@ void handleDevicesRead () {
 }
 
 int main(int argc, char **argv) {
+  writeout("testing jw\n");
+  jw_test();
+  return 0;
+
   //allocation and setup
   init();
 

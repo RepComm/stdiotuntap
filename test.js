@@ -8,10 +8,28 @@ stdiotuntap.on("spawn", () => {
 
   stdiotuntap.stdout.on('data', (data) => {
     console.log(`stdiotuntap stdout: ${data}`);
-  });
 
-  stdiotuntap.stderr.on('data', (data) => {
-    console.error(`stdiotuntap stderr: ${data}`);
+    /**@type {import("./src/protocol.d").JsonMsg} */
+    let json = JSON.parse(data);
+    
+
+
+    switch(json.cmd) {
+      case "log":
+        /**@type {import("./src/protocol.d").JsonLogMsg}*/
+        let logJson = json;
+
+        console.log(logJson.log.data);
+        break;
+      case "data":
+        /**@type {import("./src/protocol.d").JsonDataMsg}*/
+        let dataJson = json;
+
+        // dataJson.data.base64
+        break;
+      default:
+        break;
+    }
   });
 
   stdiotuntap.on('close', (code) => {
@@ -19,7 +37,8 @@ stdiotuntap.on("spawn", () => {
   });
 
   setInterval(() => {
-    stdiotuntap.stdin.write("{hi}", (err) => {
+    let msg = JSON.stringify(test());
+    stdiotuntap.stdin.write(msg, (err) => {
       if (err) console.log("failed to write", err);
     });
   }, 500);
@@ -48,15 +67,21 @@ function ipToHex(ip) {
 
 /**
  * 
- * @returns {import("./src/protocol.d").JsonDeviceMsg} data
+ * @returns {import("./src/protocol.d").JsonLogMsg} data
  */
 function test () {
   return {
-    id: 0,
-    isAck: false,
-    cmd: "dev",
-    dev: {
-      cmd: "create"
+    cmd: "log",
+    log: {
+      data: "Hello world",
+      error: "i hate this keyboard"
     }
   }
+}
+
+function main () {
+  let json = test();
+  let str = JSON.stringify(json);
+
+
 }
