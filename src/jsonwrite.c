@@ -25,12 +25,24 @@ struct jw_info {
 
 #define JW_DEFAULT_OUTPUT_ALLOC_SIZE 4096
 
+bool jw_last_char_was (jw_info_p info, char ch) {
+  return (
+    info->outputJsonLength > 0 &&
+    info->outputJsonString[info->outputJsonLength-1] == ch
+  );
+}
+
 int jw_output_length (jw_info_p info) {
+  // if (jw_last_char_was(info, ',')) {
+  //   return info->outputJsonLength-1;
+  // } else {
+  //   printf("edge case in jsonwrite.c\n");
+  // }
   return info->outputJsonLength;
 }
 
 void jw_output_copy (jw_info_p info, str out) {
-  strcpy(out, info->outputJsonString);
+  memcpy(out, info->outputJsonString, info->outputJsonLength);
 }
 
 /**Reset all internal data
@@ -122,13 +134,6 @@ bool jw_begin(jw_info_p info) {
   return jw_char(info, '{');
 }
 
-bool jw_last_char_was (jw_info_p info, char ch) {
-  return (
-    info->outputJsonLength > 0 &&
-    info->outputJsonString[info->outputJsonLength-1] == ch
-  );
-}
-
 /**Internal
  * Decrements outputJsonlength by count
  */
@@ -144,7 +149,8 @@ bool jw_end (jw_info_p info) {
   //deal with trailing comma
   if (jw_last_char_was(info, ',')) jw_rewind(info, 1);
 
-  return jw_char(info, '}');
+  if (!jw_char(info, '}')) return false;
+  return jw_char(info, ',');
 }
 
 bool jw_key (jw_info_p info, str key) {
@@ -231,6 +237,35 @@ bool jw_value_float (jw_info_p info, float value) {
   return true;
 }
 
+bool jw_array_begin (jw_info_p info) {
+  return jw_char(info, '[');
+}
+
+/**End an object
+ */
+bool jw_array_end (jw_info_p info) {
+  if (jw_info_error(info)) return false;
+  
+  //deal with trailing comma
+  if (jw_last_char_was(info, ',')) jw_rewind(info, 1);
+
+  if (!jw_char(info, ']')) return false;
+  return jw_char(info, ',');
+}
+
+/* Removes comma at the end of the outputJsonString if present
+ * Returns true if removed, returns false if there was none to remove
+ */
+bool jw_delete_trailing_comma (jw_info_p info) {
+  if (jw_last_char_was(info, ',')) {
+    info->outputJsonLength--;
+    jw_char(info, 0x00);
+    return true;
+  } else {
+    return false;
+  }
+}
+
 void jw_test () {
   //@see jw_info_create_ex() for creating with different sized allocations
   //for jsonOutputString
@@ -249,6 +284,13 @@ void jw_test () {
       jw_value_int(info, 4);
       // jw_value_float(info, 4.1);
     jw_end(info);
+    jw_key(info, "test");
+    jw_array_begin(info);
+      for (int i=0; i<10; i++) {
+        jw_value_int(info, i);
+      }
+      jw_value_str(info, "test");
+    jw_array_end(info);
   jw_end(info);
 
   //check for errors
@@ -260,6 +302,8 @@ void jw_test () {
       printf("JsonWrite did not provide debug info, this should be reported\n");
     }
   }
+
+  jw_delete_trailing_comma(info);
 
   //optionally save output for later, jsonString survives jw_info_destroy
   str jsonString = (char *) malloc(sizeof(char) * jw_output_length(info));
