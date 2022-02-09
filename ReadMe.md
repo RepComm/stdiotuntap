@@ -7,7 +7,7 @@ Configure tun / tap devices using nothing but json over stdio!
 - [libtuntap](https://github.com/LaKabane/libtuntap) as tun/tap driver
 - [tiny-json](https://github.com/rafagafe/tiny-json) as a json parser
 - [jsonwrite.c](./blob/master/src/jsonwrite.c) as (in-house 😎) json stringify
-
+- [b64.c](https://github.com/littlstar/b64.c) as base64 encoder for packets in json
 
 ## State
 Half way functional, xmits all packets received thru json to host program!
