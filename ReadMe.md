@@ -3,30 +3,27 @@
 
 Configure tun / tap devices using nothing but json over stdio!
 
-Uses [libtuntap](https://github.com/LaKabane/libtuntap) as a shared c library
+## libs
+- [libtuntap](https://github.com/LaKabane/libtuntap) as tun/tap driver
+- [tiny-json](https://github.com/rafagafe/tiny-json) as a json parser
+- [jsonwrite.c](./blob/master/src/jsonwrite.c) as (in-house 😎) json stringify
 
-And [tiny-json](https://github.com/rafagafe/tiny-json) as a json parser
 
 ## State
-Partially functional
+Half way functional, xmits all packets received thru json to host program!
+Just need to add writing of packets and it will be min-viable!
 
 Implemented so far:
-- json parsing from stdin
+- json commands input / response output thru stdio
 - json stringify lib impl
-- tun device create/start over json
-- tun device created / functional / tested
+- tun device create, up, down, destroy commands
 - origin and destination IP packets decoded
 
 ## TODO
-- json command listening
-  - pub/sub aka read device
-  - destroy device
+- json commands:
+  - device subscribe/unsubscribe (all on by default currently)
   - write to device
-- json output
-  - log info
-  - notify device events
-- silence libtuntap to prevent stdout pollution
-
+- fix device pool non-refreshable behaviour
 
 ## what
 tf is this?
