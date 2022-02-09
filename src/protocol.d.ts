@@ -45,14 +45,16 @@ export interface JsonLogMsg extends JsonMsg {
 
 /**
  * Example:
- * Start a new device
+ * 
+ * Send to create a device:
  * `{"cmd":"dev","dev":{"cmd":"create"}}`
+ * Response:
+ * {"cmd":"dev","dev":{"cmd":"create","id":4,"ifname":"tun0","ipv4":"10.0.0.1"}}
  * 
- * //attempting to create device
- * //tunnel created with fd 4 and ip 10.0.0.1
- * 
- * Set device up
+ * Send to 'up' device 4:
  * `{"cmd":"dev","dev":{"cmd":"up","id":4}}`
+ * Response:
+ * {"cmd":"dev","dev":{"cmd":"up","id":4}}
  * 
  * Ping an endpoint using the device
  * `$ ping 10.1.1.0 -I tun0`

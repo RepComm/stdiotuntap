@@ -8,7 +8,11 @@
 #include "./libtuntap/tuntap.h"
 #include "./tiny-json/tiny-json.c"
 #include "./jsonwrite.c"
+
 #include "./b64.c/b64.h"
+#include "./b64.c/buffer.c"
+#include "./b64.c/encode.c"
+#include "./b64.c/decode.c"
 
 #define dev struct device *
 #define constr char const *
@@ -22,31 +26,6 @@ writeout (const char *__restrict __fmt, ...) {
 
   fflush(stdout);
   return result;
-}
-
-struct JsonMsg {
-  bool isAck;
-  int id;
-  char * cmd;
-};
-#define JsonMsgP struct JsonMsg *
-
-// int JsonMsgToSerialize (char * dest, JsonMsgP src) {
-//   char* p = dest;                       // p always points to the null character
-//   p = json_objOpen( p, NULL );          // --> {\0
-//   p = json_int( p, "isAck", src->isAck ); // --> {"temp":22,\0
-//   p = json_int( p, "id", src->id );   // --> {"temp":22,"hum":45,\0
-//   p = json_str( p, "cmd", src->cmd );
-
-//   //TODO - iterate based on cmd value
-
-//   p = json_objClose( p );               // --> {"temp":22,"hum":45},\0
-//   p = json_end( p );                    // --> {"temp":22,"hum":45}\0
-//   return p - dest;       
-// }
-
-void _tuntap_log (int a, const char * b) {
-  // writeout("%s", (char *)b);
 }
 
 //TODO - won't handle escaped { or } correctly!
@@ -81,6 +60,8 @@ char * jsonBufferTrimmed;
 json_t jsonPool[ jsonPoolMaxFields ];
 const json_t * json;
 
+jw_info_p info;
+
 #define devPoolMaxSize 10
 dev devPool[ devPoolMaxSize ];
 int nextUnusedDeviceIndex = 0;
@@ -91,6 +72,20 @@ unsigned char * devReadData;
 
 bool doLoop;
 
+void _tuntap_log (int level, const char *msg) {
+  jw_info_start(info);
+  jw_begin(info);
+    jw_key(info, "cmd");
+    jw_value_str(info, "log");
+    jw_key(info, "log");
+    jw_begin(info);
+      jw_key(info, "data");
+      jw_value_str(info, (char *)msg);
+    jw_end(info);
+  jw_end(info);
+  jw_info_stop(info);
+  writeout(info->outputJsonString);
+}
 
 int getDevicePoolIndex (dev d) {
   for (int i=0; i<nextUnusedDeviceIndex; i++) {
@@ -106,6 +101,8 @@ bool canCreateDevice () {
 dev createDevice () {
   if (canCreateDevice()) {
     dev tunnel = tuntap_init();
+    tuntap_log_set_cb(_tuntap_log);
+
     devPool[nextUnusedDeviceIndex] = tunnel;
     nextUnusedDeviceIndex ++;
     return tunnel;
@@ -152,7 +149,9 @@ void setDeviceUpState (dev d, bool upState) {
 }
 
 void init () {
-  tuntap_log_set_cb(&_tuntap_log);
+  tuntap_log_set_cb(_tuntap_log);
+
+  info = jw_info_create();
 
   jsonBuffer = (char *) malloc(jsonBufferAllocSize * sizeof(char));
   jsonBufferTrimmed = (char *) malloc(jsonBufferAllocSize * sizeof(char));
@@ -175,6 +174,7 @@ void cleanup () {
   free(jsonBuffer);
   free(jsonBufferTrimmed);
   free(devReadData);
+  jw_info_destroy(info);
 }
 
 constr json_getPropString (const json_t * json, char * propname) {
@@ -231,6 +231,18 @@ void handleJsonInput () {
 
   if (streq(vJsonCmd,"die")) {
     doLoop = false;
+    jw_info_start(info);
+
+      jw_begin(info);
+        jw_key(info, "cmd");
+        jw_value_str(info, (char *) vJsonCmd);
+        jw_key(info, (char *)vJsonCmd);
+        
+      jw_end(info);
+
+      jw_info_stop(info);
+
+      writeout(info->outputJsonString);
     return;
   }
   json_t const* pSub = json_getProperty(json, vJsonCmd);
@@ -250,7 +262,7 @@ void handleJsonInput () {
 
     if (tunnel == NULL) {
       if (streq(vDevCmd, "create")) {
-        writeout("attempting to create device");
+        // writeout("attempting to create device");
 
         tunnel = createDevice();
         if (tunnel == NULL) {
@@ -261,14 +273,35 @@ void handleJsonInput () {
         
         tuntap_start(tunnel, TUNTAP_MODE_TUNNEL, TUNTAP_ID_ANY);
 
-        // char * ifname = tuntap_get_ifname(tunnel);
+        char * ifname = tuntap_get_ifname(tunnel);
         
         //TODO - grab ipaddr from json if it is present
         char * ipaddr = "10.0.0.1";
         tuntap_set_ip(tunnel, ipaddr, 24);
         
         int fd = tuntap_get_fd(tunnel);
-        writeout("tunnel created with fd %i and ip %s\n", fd, ipaddr);
+
+        jw_info_start(info);
+
+        jw_begin(info);
+          jw_key(info, "cmd");
+          jw_value_str(info, (char *) vJsonCmd);
+          jw_key(info, (char *)vJsonCmd);
+          jw_begin(info);
+            jw_key(info, "cmd");
+            jw_value_str(info, (char *)vDevCmd);
+            jw_key(info, "id");
+            jw_value_int(info, fd);
+            jw_key(info, "ifname");
+            jw_value_str(info, ifname);
+            jw_key(info, "ipv4");
+            jw_value_str(info, ipaddr);
+          jw_end(info);
+        jw_end(info);
+
+        jw_info_stop(info);
+
+        writeout(info->outputJsonString);
 
         //TODO - respond with device info
         
@@ -283,19 +316,65 @@ void handleJsonInput () {
       // tuntap_up(tunnel);
       setDeviceUpState(tunnel, true);
 
-      //TODO - respond with success
-      writeout("tunnel up\n");
+      jw_info_start(info);
+
+      jw_begin(info);
+        jw_key(info, "cmd");
+        jw_value_str(info, (char *) vJsonCmd);
+        jw_key(info, (char *)vJsonCmd);
+        jw_begin(info);
+          jw_key(info, "cmd");
+          jw_value_str(info, (char *)vDevCmd);
+          jw_key(info, "id");
+          jw_value_int(info, (int)devId);
+        jw_end(info);
+      jw_end(info);
+
+      jw_info_stop(info);
+
+      writeout(info->outputJsonString);
       return;
     } else if (streq(vDevCmd, "down")) {
       setDeviceUpState(tunnel, false);
-      // tuntap_down(tunnel);
-      writeout("tunnel down\n");
-      //TODO - respond with success
+      
+      jw_info_start(info);
+
+      jw_begin(info);
+        jw_key(info, "cmd");
+        jw_value_str(info, (char *) vJsonCmd);
+        jw_key(info, (char *)vJsonCmd);
+        jw_begin(info);
+          jw_key(info, "cmd");
+          jw_value_str(info, (char *)vDevCmd);
+          jw_key(info, "id");
+          jw_value_int(info, (int)devId);
+        jw_end(info);
+      jw_end(info);
+
+      jw_info_stop(info);
+
+      writeout(info->outputJsonString);
       return;
     } else if (streq(vDevCmd, "destroy")) {
       tuntap_destroy(tunnel);
-      writeout("tunnel destroy\n");
-      //TODO - respond with success
+      
+      jw_info_start(info);
+
+      jw_begin(info);
+        jw_key(info, "cmd");
+        jw_value_str(info, (char *) vJsonCmd);
+        jw_key(info, (char *)vJsonCmd);
+        jw_begin(info);
+          jw_key(info, "cmd");
+          jw_value_str(info, (char *)vDevCmd);
+          jw_key(info, "id");
+          jw_value_int(info, (int)devId);
+        jw_end(info);
+      jw_end(info);
+
+      jw_info_stop(info);
+
+      writeout(info->outputJsonString);
       return;
     } else if (streq(vDevCmd, "sub")) {
       //TODO - by default we're always sub'd
@@ -338,14 +417,31 @@ void handleDeviceRead (dev d) {
 
   tuntap_read(d, devReadData, readable);
 
-  printf("\norigin : ");
-  ipPrintFromBuffer(devReadData, 12);
+  char * base64 = b64_encode(devReadData, (size_t)readable);
 
-  printf(" -> destination : ");
-  ipPrintFromBuffer(devReadData, 16);
+  jw_info_start(info);
+  jw_begin(info);
+    jw_key(info, "cmd");
+    jw_value_str(info, "data");
 
-  printf("\n--------\n");
-  fflush(stdout);
+    jw_key(info, "data");
+    jw_begin(info);
+      jw_key(info, "base64");
+      jw_value_str(info, base64);
+    jw_end(info);
+  jw_end(info);
+  jw_info_stop(info);
+  writeout(info->outputJsonString);
+
+  free(base64);
+  // printf("\norigin : ");
+  // ipPrintFromBuffer(devReadData, 12);
+
+  // printf(" -> destination : ");
+  // ipPrintFromBuffer(devReadData, 16);
+
+  // printf("\n--------\n");
+  // fflush(stdout);
 }
 
 void handleDevicesRead () {
@@ -359,10 +455,6 @@ void handleDevicesRead () {
 }
 
 int main(int argc, char **argv) {
-  writeout("testing jw\n");
-  jw_test();
-  return 0;
-
   //allocation and setup
   init();
 

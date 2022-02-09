@@ -2,8 +2,11 @@
 /**Basic JsonWrite module
  * @author Jonathan Crowder
  * 
- * @see jw_tst() for example usage
+ * @see jw_test() for example usage
  */
+
+#ifndef JSONWRITE_C
+#define JSONWRITE_C 1
 
 #include <string.h>
 #include <stdio.h>
@@ -48,7 +51,7 @@ void jw_output_copy (jw_info_p info, str out) {
 /**Reset all internal data
  * Call when you want to re-use a struct jw_info
  */
-void jw_info_clear (jw_info_p info) {
+void jw_info_start (jw_info_p info) {
   info->errorCode = JW_ERROR_NONE;
   info->debug = NULL;
   info->outputJsonLength = 0;
@@ -61,7 +64,7 @@ jw_info_p jw_info_create_ex(int outputJsonStringAllocSize) {
   info->outputJsonStringAllocSize = outputJsonStringAllocSize;
   info->outputJsonString = (str) malloc( sizeof (char) * info->outputJsonStringAllocSize);
 
-  jw_info_clear(info);
+  jw_info_start(info);
   return info;
 }
 jw_info_p jw_info_create() {
@@ -266,6 +269,10 @@ bool jw_delete_trailing_comma (jw_info_p info) {
   }
 }
 
+void jw_info_stop (jw_info_p info) {
+  jw_delete_trailing_comma(info);
+}
+
 void jw_test () {
   //@see jw_info_create_ex() for creating with different sized allocations
   //for jsonOutputString
@@ -315,6 +322,8 @@ void jw_test () {
 
   //cleanup
   jw_info_destroy(info);
-  //you could instead simply jw_info_clear(info);
+  //you could instead simply jw_info_start(info);
   //and reuse it.
 }
+
+#endif
