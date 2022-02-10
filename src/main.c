@@ -303,12 +303,9 @@ void handleJsonInput() {
 
         writeout(info->outputJsonString);
 
-        // TODO - respond with device info
-
         return;
       }
 
-      // TODO - cannot perform action without device fd
       return;
     }
 
@@ -386,22 +383,45 @@ void handleJsonInput() {
       return;
     }
   } else if (streq(vJsonCmd, "data")) {
-  } else if (streq(vJsonCmd, "die")) {
-    doLoop = false;
-    // TODO - respond with ack
-    printf("u die");
-    fflush(stdout);
-    return;
+
   }
-
-  printf("[json] type '%s' from %s\n", vJsonCmd, jsonBuffer);
-
-  fflush(stdout);  // necessary to let the output flow to process parent
 }
 
-void ipPrintFromBuffer(unsigned char *data, int dataOffset) {
-  printf("%u.%u.%u.%u", data[dataOffset], data[dataOffset + 1],
-         data[dataOffset + 2], data[dataOffset + 3]);
+#define IP_FRAME_IPV4_SRC 12
+#define IP_FRAME_IPV4_DEST 16
+#define IP_V4_CSTR_MAX_LEN 16 //including \0
+
+int ip_frame_get_ipv4 (unsigned char * data, int IP_WHICH, char * out) {
+  int dataOffset = IP_WHICH;
+
+  int size = snprintf(
+    out,
+    IP_V4_CSTR_MAX_LEN,
+    "%u.%u.%u.%u",
+    data[dataOffset],
+    data[dataOffset + 1],
+    data[dataOffset + 2],
+    data[dataOffset + 3]
+  );
+
+  return size;
+}
+int ip_frame_get_ipv4_strlen (unsigned char * data, int IP_WHICH) {
+  int dataOffset = IP_WHICH;
+
+  int size = snprintf(
+    NULL, 0, 
+    "%u.%u.%u.%u",
+    data[dataOffset],
+    data[dataOffset + 1],
+    data[dataOffset + 2],
+    data[dataOffset + 3]
+  );
+  return size;
+}
+
+int ip_frame_get_ipv4_strmaxlen () {
+  return strlen("255.255.255.255");
 }
 
 void handleDeviceRead(dev d) {
@@ -412,6 +432,11 @@ void handleDeviceRead(dev d) {
 
   char *base64 = b64_encode(devReadData, (size_t)readable);
 
+  char srcIpv4[IP_V4_CSTR_MAX_LEN];
+  ip_frame_get_ipv4(devReadData, IP_FRAME_IPV4_SRC, srcIpv4);
+  char destIpv4[IP_V4_CSTR_MAX_LEN];
+  ip_frame_get_ipv4(devReadData, IP_FRAME_IPV4_DEST, destIpv4);
+
   jw_info_start(info);
   jw_begin(info);
   jw_key(info, "cmd");
@@ -419,6 +444,10 @@ void handleDeviceRead(dev d) {
 
   jw_key(info, "data");
   jw_begin(info);
+  jw_key(info, "srcIpv4");
+  jw_value_str(info, srcIpv4);
+  jw_key(info, "destIpv4");
+  jw_value_str(info, destIpv4);
   jw_key(info, "base64");
   jw_value_str(info, base64);
   jw_end(info);
