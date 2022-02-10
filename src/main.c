@@ -79,6 +79,8 @@ bool doLoop;
 void _tuntap_log(int level, const char *msg) {
   jw_info_start(info);
   jw_begin(info);
+  jw_key(info, "isAck");
+  jw_value_boolean(info, false);
   jw_key(info, "cmd");
   jw_value_str(info, "log");
   jw_key(info, "log");
@@ -234,6 +236,8 @@ void handleJsonInput() {
     jw_info_start(info);
 
     jw_begin(info);
+    jw_key(info, "isAck");
+    jw_value_boolean(info, true);
     jw_key(info, "cmd");
     jw_value_str(info, (char *)vJsonCmd);
     jw_key(info, (char *)vJsonCmd);
@@ -284,6 +288,8 @@ void handleJsonInput() {
         jw_info_start(info);
 
         jw_begin(info);
+        jw_key(info, "isAck");
+        jw_value_boolean(info, true);
         jw_key(info, "cmd");
         jw_value_str(info, (char *)vJsonCmd);
         jw_key(info, (char *)vJsonCmd);
@@ -314,8 +320,9 @@ void handleJsonInput() {
       setDeviceUpState(tunnel, true);
 
       jw_info_start(info);
-
       jw_begin(info);
+      jw_key(info, "isAck");
+      jw_value_boolean(info, true);
       jw_key(info, "cmd");
       jw_value_str(info, (char *)vJsonCmd);
       jw_key(info, (char *)vJsonCmd);
@@ -337,6 +344,8 @@ void handleJsonInput() {
       jw_info_start(info);
 
       jw_begin(info);
+      jw_key(info, "isAck");
+      jw_value_boolean(info, true);
       jw_key(info, "cmd");
       jw_value_str(info, (char *)vJsonCmd);
       jw_key(info, (char *)vJsonCmd);
@@ -358,6 +367,8 @@ void handleJsonInput() {
       jw_info_start(info);
 
       jw_begin(info);
+      jw_key(info, "isAck");
+      jw_value_boolean(info, true);
       jw_key(info, "cmd");
       jw_value_str(info, (char *)vJsonCmd);
       jw_key(info, (char *)vJsonCmd);
@@ -383,7 +394,93 @@ void handleJsonInput() {
       return;
     }
   } else if (streq(vJsonCmd, "data")) {
+    int64_t devId = json_getPropInt(pSub, "id");
+    if (devId == 0xDEADBEEF) {
+      jw_info_start(info);
+      jw_begin(info);
+        jw_key(info, "isAck");
+        jw_value_boolean(info, true);
+        jw_key(info, "cmd");
+        jw_value_str(info, "log");
 
+        jw_key(info, "log");
+        jw_begin(info);
+
+        jw_key(info, "error");
+        jw_value_str(info, "no device id (fd) provided, cannot write ip packet to undeclared tunnel");
+      
+      jw_end(info);
+      jw_info_stop(info);
+
+      writeout(info->outputJsonString);
+      return;
+    }
+    dev tunnel = tunnel = getDeviceByFD(devId);
+
+    if (tunnel == NULL) {
+      jw_info_start(info);
+      jw_begin(info);
+        jw_key(info, "isAck");
+        jw_value_boolean(info, true);
+        jw_key(info, "cmd");
+        jw_value_str(info, "log");
+
+        jw_key(info, "log");
+        jw_begin(info);
+
+        jw_key(info, "error");
+        jw_value_str(info, "no tunnel device found for id, cannot send ip packet");
+      
+      jw_end(info);
+      jw_info_stop(info);
+
+      writeout(info->outputJsonString);
+      return;
+    }
+
+    const char * base64 = json_getPropString(pSub, "base64");
+    if (base64 == NULL) {
+      jw_info_start(info);
+      jw_begin(info);
+        jw_key(info, "isAck");
+        jw_value_boolean(info, true);
+        jw_key(info, "cmd");
+        jw_value_str(info, "log");
+
+        jw_key(info, "log");
+        jw_begin(info);
+
+        jw_key(info, "error");
+        jw_value_str(info, "no base64 provided, cannot write ip packet to tunnel");
+      
+      jw_end(info);
+      jw_info_stop(info);
+
+      writeout(info->outputJsonString);
+    }
+    int base64len = strlen(base64);
+
+    size_t readDataSize = 0;
+    unsigned char * readData = b64_decode_ex(base64, base64len, &readDataSize);
+
+    tuntap_write(tunnel, readData, readDataSize);
+
+    free(readData);
+
+    jw_info_start(info);
+    jw_begin(info);
+      jw_key(info, "isAck");
+      jw_value_boolean(info, true);
+      jw_key(info, "cmd");
+      jw_value_str(info, (char *) vJsonCmd);
+
+      jw_key(info, (char*) vJsonCmd);
+      jw_begin(info);
+
+    jw_end(info);
+    jw_info_stop(info);
+
+    writeout(info->outputJsonString);
   }
 }
 
@@ -439,6 +536,8 @@ void handleDeviceRead(dev d) {
 
   jw_info_start(info);
   jw_begin(info);
+  jw_key(info, "isAck");
+  jw_value_boolean(info, false);
   jw_key(info, "cmd");
   jw_value_str(info, "data");
 

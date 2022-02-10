@@ -10,8 +10,11 @@ Configure tun / tap devices using nothing but json over stdio!
 - [b64.c](https://github.com/littlstar/b64.c) as base64 encoder for packets in json
 
 ## State
-Half way functional, xmits all packets received thru json to host program!
-Just need to add writing of packets and it will be min-viable!
+Operational!
+
+Can now both send and receive IP traffic thru tunnel to standard input/output over JSON/base64 strings. See [protocol.d.ts](./protocol.d.ts) for typescript definitions of JSON format and some example JSON messages to talk to this software over terminal
+
+Minimum viable product is here and ready for testing!
 
 Implemented so far:
 - json commands input / response output thru stdio
@@ -22,8 +25,8 @@ Implemented so far:
 ## TODO
 - json commands:
   - device subscribe/unsubscribe (all on by default currently)
-  - write to device
 - fix device pool non-refreshable behaviour
+- rewrite b64.c to not be so weird
 
 ## what
 tf is this?

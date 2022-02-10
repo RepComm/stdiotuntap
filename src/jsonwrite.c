@@ -168,6 +168,17 @@ bool jw_value_str(jw_info_p info, str value) {
   return true;
 }
 
+bool jw_value_boolean (jw_info_p info, bool value) {
+  if (jw_info_error(info)) return false;
+  if (value) {
+    if (!jw_str(info, "true")) return false;
+  } else {
+    if (!jw_str(info, "false")) return false;
+  }
+  if (!jw_char(info, ',')) return false;
+  return true;
+}
+
 /**
  * https://stackoverflow.com/a/8257728/8112809
  */
