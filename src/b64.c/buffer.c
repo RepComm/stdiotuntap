@@ -20,12 +20,12 @@ char* b64_buf_malloc()
 	return buf;
 }
 
-char* b64_buf_realloc(unsigned char* ptr, size_t size)
+unsigned char* b64_buf_realloc(unsigned char* ptr, size_t size)
 {
 	if (size > bufc * B64_BUFFER_SIZE)
 	{
 		while (size > bufc * B64_BUFFER_SIZE) bufc++;
-		char* buf = b64_realloc(ptr, B64_BUFFER_SIZE * bufc);
+		unsigned char* buf = b64_realloc(ptr, B64_BUFFER_SIZE * bufc);
 		if (!buf) return NULL;
 		return buf;
 	}

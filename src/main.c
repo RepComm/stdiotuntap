@@ -1,18 +1,17 @@
 
+#include <memory.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <sys/ioctl.h>
-#include <memory.h>
-
-#include "./libtuntap/tuntap.h"
-#include "./tiny-json/tiny-json.c"
-#include "./jsonwrite.c"
 
 #include "./b64.c/b64.h"
 #include "./b64.c/buffer.c"
-#include "./b64.c/encode.c"
 #include "./b64.c/decode.c"
+#include "./b64.c/encode.c"
+#include "./jsonwrite.c"
+#include "./libtuntap/tuntap.h"
+#include "./tiny-json/tiny-json.c"
 
 #define dev struct device *
 #define constr char const *
@@ -20,31 +19,36 @@
 #define MSGTYPE_LOG 0
 #define MSGTYPE_DATA 1
 
-__fortify_function int
-writeout (const char *__restrict __fmt, ...) {
-  int result = __printf_chk (__USE_FORTIFY_LEVEL - 1, __fmt, __va_arg_pack ());
+__fortify_function int writeout(const char *__restrict __fmt, ...) {
+  int result = __printf_chk(__USE_FORTIFY_LEVEL - 1, __fmt, __va_arg_pack());
 
   fflush(stdout);
   return result;
 }
 
-//TODO - won't handle escaped { or } correctly!
-int scan_json_string (char * buffer, int bufferSize) {
+// TODO - won't handle escaped { or } correctly!
+int scan_json_string(char *buffer, int bufferSize) {
   int openBracketCount = 0;
   int closeBracketCount = 0;
+
+  bool isEscaped = false;
 
   int ch = 0;
   int readSize = 0;
 
-  for (int i=0; i<bufferSize; i++) {
+  for (int i = 0; i < bufferSize; i++) {
     ch = getchar();
-    if (i==0 && ch != '{') return 0;
+    if (i == 0 && ch != '{') return 0;
     buffer[i] = ch;
-    readSize ++;
-    if (ch == '{') {
-      openBracketCount ++;
-    } else if (ch == '}') {
-      closeBracketCount ++;
+    readSize++;
+
+    if (isEscaped) {
+    } else {
+      if (ch == '{') {
+        openBracketCount++;
+      } else if (ch == '}') {
+        closeBracketCount++;
+      }
     }
 
     if (openBracketCount == closeBracketCount) return readSize;
@@ -53,64 +57,62 @@ int scan_json_string (char * buffer, int bufferSize) {
 }
 
 int jsonBufferAllocSize = 2048;
-char * jsonBuffer;
-char * jsonBufferTrimmed;
+char *jsonBuffer;
+char *jsonBufferTrimmed;
 
 #define jsonPoolMaxFields 128
-json_t jsonPool[ jsonPoolMaxFields ];
-const json_t * json;
+json_t jsonPool[jsonPoolMaxFields];
+const json_t *json;
 
 jw_info_p info;
 
 #define devPoolMaxSize 10
-dev devPool[ devPoolMaxSize ];
+dev devPool[devPoolMaxSize];
 int nextUnusedDeviceIndex = 0;
-bool devPoolStarted [ devPoolMaxSize ];
+bool devPoolStarted[devPoolMaxSize];
 
 #define devReadAllocSize 4096
-unsigned char * devReadData;
+unsigned char *devReadData;
 
 bool doLoop;
 
-void _tuntap_log (int level, const char *msg) {
+void _tuntap_log(int level, const char *msg) {
   jw_info_start(info);
   jw_begin(info);
-    jw_key(info, "cmd");
-    jw_value_str(info, "log");
-    jw_key(info, "log");
-    jw_begin(info);
-      jw_key(info, "data");
-      jw_value_str(info, (char *)msg);
-    jw_end(info);
+  jw_key(info, "cmd");
+  jw_value_str(info, "log");
+  jw_key(info, "log");
+  jw_begin(info);
+  jw_key(info, "data");
+  jw_value_str(info, (char *)msg);
+  jw_end(info);
   jw_end(info);
   jw_info_stop(info);
   writeout(info->outputJsonString);
 }
 
-int getDevicePoolIndex (dev d) {
-  for (int i=0; i<nextUnusedDeviceIndex; i++) {
+int getDevicePoolIndex(dev d) {
+  for (int i = 0; i < nextUnusedDeviceIndex; i++) {
     if (devPool[i] == d) return i;
   }
   return -1;
 }
 
-bool canCreateDevice () {
-  return nextUnusedDeviceIndex < devPoolMaxSize -1;
-}
+bool canCreateDevice() { return nextUnusedDeviceIndex < devPoolMaxSize - 1; }
 
-dev createDevice () {
+dev createDevice() {
   if (canCreateDevice()) {
     dev tunnel = tuntap_init();
     tuntap_log_set_cb(_tuntap_log);
 
     devPool[nextUnusedDeviceIndex] = tunnel;
-    nextUnusedDeviceIndex ++;
+    nextUnusedDeviceIndex++;
     return tunnel;
   }
   return NULL;
 }
 
-void destroyDevice (dev d) {
+void destroyDevice(dev d) {
   int idx = getDevicePoolIndex(d);
   if (idx > -1) {
     devPool[idx] = NULL;
@@ -119,9 +121,9 @@ void destroyDevice (dev d) {
   tuntap_destroy(d);
 }
 
-dev getDeviceByFD (int deviceFileDescriptor) {
+dev getDeviceByFD(int deviceFileDescriptor) {
   dev d = NULL;
-  for (int i=0; i<nextUnusedDeviceIndex; i++) {
+  for (int i = 0; i < nextUnusedDeviceIndex; i++) {
     d = devPool[i];
     if (tuntap_get_fd(d) == deviceFileDescriptor) {
       break;
@@ -130,42 +132,41 @@ dev getDeviceByFD (int deviceFileDescriptor) {
   return d;
 }
 
-bool isDeviceStarted (dev d) {
+bool isDeviceStarted(dev d) {
   int idx = getDevicePoolIndex(d);
-  return (
-    idx > 1 && devPoolStarted[idx] == true
-  );
+  return (idx > 1 && devPoolStarted[idx] == true);
 }
 
-void setDeviceUpState (dev d, bool upState) {
+void setDeviceUpState(dev d, bool upState) {
   if (upState) {
     tuntap_up(d);
   } else {
     tuntap_down(d);
   }
   int idx = getDevicePoolIndex(d);
-  
+
   if (idx > -1) devPoolStarted[idx] = upState;
 }
 
-void init () {
+void init() {
   tuntap_log_set_cb(_tuntap_log);
 
   info = jw_info_create();
 
-  jsonBuffer = (char *) malloc(jsonBufferAllocSize * sizeof(char));
-  jsonBufferTrimmed = (char *) malloc(jsonBufferAllocSize * sizeof(char));
+  jsonBuffer = (char *)malloc(jsonBufferAllocSize * sizeof(char));
+  jsonBufferTrimmed = (char *)malloc(jsonBufferAllocSize * sizeof(char));
 
-  devReadData = (unsigned char *) malloc(devReadAllocSize * sizeof(unsigned char));
+  devReadData =
+      (unsigned char *)malloc(devReadAllocSize * sizeof(unsigned char));
 
-  for (int i=0; i<devPoolMaxSize; i++) {
+  for (int i = 0; i < devPoolMaxSize; i++) {
     devPoolStarted[i] = false;
   }
 
   doLoop = true;
 }
-void cleanup () {
-  for (int i=0; i<nextUnusedDeviceIndex; i++) {
+void cleanup() {
+  for (int i = 0; i < nextUnusedDeviceIndex; i++) {
     dev d = devPool[i];
     devPoolStarted[i] = false;
     tuntap_down(d);
@@ -177,85 +178,84 @@ void cleanup () {
   jw_info_destroy(info);
 }
 
-constr json_getPropString (const json_t * json, char * propname) {
-  const json_t * prop = json_getProperty( json, propname );
+constr json_getPropString(const json_t *json, char *propname) {
+  const json_t *prop = json_getProperty(json, propname);
   if (prop == NULL || json_getType(prop) != JSON_TEXT) return NULL;
-  return json_getValue( prop );
+  return json_getValue(prop);
 }
 
 /**
  * returns 0xDEADBEEF if prop didn't exist
  */
-int64_t json_getPropInt (const json_t * json, char * propname) {
-  json_t const * prop = json_getProperty( json, propname );
+int64_t json_getPropInt(const json_t *json, char *propname) {
+  json_t const *prop = json_getProperty(json, propname);
   if (prop == NULL) return 0xDEADBEEF;
-  if(json_getType(prop) != JSON_INTEGER) return 0xDEADBEEF;
+  if (json_getType(prop) != JSON_INTEGER) return 0xDEADBEEF;
 
   return json_getInteger(prop);
 }
 
-bool json_propIs (json_t * json, char * propname, char * value) {
-  char const * vProp = json_getPropString(json, propname);
+bool json_propIs(json_t *json, char *propname, char *value) {
+  char const *vProp = json_getPropString(json, propname);
   if (vProp == NULL) return false;
   return strcmp(vProp, value) == 0;
 }
 
-bool streq (const char * a, const char * b) {
-  return strcmp(a, b) == 0;
-}
+bool streq(const char *a, const char *b) { return strcmp(a, b) == 0; }
 
-void handleJsonInput () {
-  //see if we even need to do anything
+void handleJsonInput() {
+  // see if we even need to do anything
   int n;
   if (ioctl(0, FIONREAD, &n) != 0 || n < 1) return;
   int jsonBufferReadSize = scan_json_string(jsonBuffer, jsonBufferAllocSize);
 
-  //do nothing if there is no data
+  // do nothing if there is no data
   if (jsonBufferReadSize == 0) {
     // printf("no valid input, skipping\n");
     return;
   }
 
-  //copy only relevant data by erasing previous and populating with subset of array
+  // copy only relevant data by erasing previous and populating with subset of
+  // array
   memset(jsonBufferTrimmed, 0x00, jsonBufferAllocSize);
   memcpy(jsonBufferTrimmed, jsonBuffer, jsonBufferReadSize);
-  
+
   // printf("You entered %.*s\n", jsonBufferReadSize, jsonBufferTrimmed);
 
-  //parse json
+  // parse json
   json = json_create(jsonBufferTrimmed, jsonPool, jsonPoolMaxFields);
   if (json == NULL) return;
 
   constr vJsonCmd = json_getPropString(json, "cmd");
   if (vJsonCmd == NULL) return;
 
-  if (streq(vJsonCmd,"die")) {
+  if (streq(vJsonCmd, "die")) {
     doLoop = false;
     jw_info_start(info);
 
-      jw_begin(info);
-        jw_key(info, "cmd");
-        jw_value_str(info, (char *) vJsonCmd);
-        jw_key(info, (char *)vJsonCmd);
-        
-      jw_end(info);
+    jw_begin(info);
+    jw_key(info, "cmd");
+    jw_value_str(info, (char *)vJsonCmd);
+    jw_key(info, (char *)vJsonCmd);
 
-      jw_info_stop(info);
+    jw_end(info);
 
-      writeout(info->outputJsonString);
+    jw_info_stop(info);
+
+    writeout(info->outputJsonString);
     return;
   }
-  json_t const* pSub = json_getProperty(json, vJsonCmd);
+  json_t const *pSub = json_getProperty(json, vJsonCmd);
   if (pSub == NULL) return;
   if (json_getType(pSub) != JSON_OBJ) return;
 
-  //may be 0xDEADBEEF (aka null, but null is 0)!
+  // may be 0xDEADBEEF (aka null, but null is 0)!
   // int64_t id = json_getPropInt(json, "id");
 
   if (streq(vJsonCmd, "dev")) {
     constr vDevCmd = json_getPropString(pSub, "cmd");
     if (vDevCmd == NULL) return;
-    //may be 0xDEADBEEF (aka null, but null is 0)!
+    // may be 0xDEADBEEF (aka null, but null is 0)!
     int64_t devId = json_getPropInt(pSub, "id");
     dev tunnel = NULL;
     if (devId != 0xDEADBEEF) tunnel = getDeviceByFD(devId);
@@ -266,50 +266,50 @@ void handleJsonInput () {
 
         tunnel = createDevice();
         if (tunnel == NULL) {
-          //respond with pool too big exception
+          // respond with pool too big exception
           writeout("did not create device");
           return;
         }
-        
+
         tuntap_start(tunnel, TUNTAP_MODE_TUNNEL, TUNTAP_ID_ANY);
 
-        char * ifname = tuntap_get_ifname(tunnel);
-        
-        //TODO - grab ipaddr from json if it is present
-        char * ipaddr = "10.0.0.1";
+        char *ifname = tuntap_get_ifname(tunnel);
+
+        // TODO - grab ipaddr from json if it is present
+        char *ipaddr = "10.0.0.1";
         tuntap_set_ip(tunnel, ipaddr, 24);
-        
+
         int fd = tuntap_get_fd(tunnel);
 
         jw_info_start(info);
 
         jw_begin(info);
-          jw_key(info, "cmd");
-          jw_value_str(info, (char *) vJsonCmd);
-          jw_key(info, (char *)vJsonCmd);
-          jw_begin(info);
-            jw_key(info, "cmd");
-            jw_value_str(info, (char *)vDevCmd);
-            jw_key(info, "id");
-            jw_value_int(info, fd);
-            jw_key(info, "ifname");
-            jw_value_str(info, ifname);
-            jw_key(info, "ipv4");
-            jw_value_str(info, ipaddr);
-          jw_end(info);
+        jw_key(info, "cmd");
+        jw_value_str(info, (char *)vJsonCmd);
+        jw_key(info, (char *)vJsonCmd);
+        jw_begin(info);
+        jw_key(info, "cmd");
+        jw_value_str(info, (char *)vDevCmd);
+        jw_key(info, "id");
+        jw_value_int(info, fd);
+        jw_key(info, "ifname");
+        jw_value_str(info, ifname);
+        jw_key(info, "ipv4");
+        jw_value_str(info, ipaddr);
+        jw_end(info);
         jw_end(info);
 
         jw_info_stop(info);
 
         writeout(info->outputJsonString);
 
-        //TODO - respond with device info
-        
+        // TODO - respond with device info
+
         return;
       }
 
-      //TODO - cannot perform action without device fd
-      return; 
+      // TODO - cannot perform action without device fd
+      return;
     }
 
     if (streq(vDevCmd, "up")) {
@@ -319,15 +319,15 @@ void handleJsonInput () {
       jw_info_start(info);
 
       jw_begin(info);
-        jw_key(info, "cmd");
-        jw_value_str(info, (char *) vJsonCmd);
-        jw_key(info, (char *)vJsonCmd);
-        jw_begin(info);
-          jw_key(info, "cmd");
-          jw_value_str(info, (char *)vDevCmd);
-          jw_key(info, "id");
-          jw_value_int(info, (int)devId);
-        jw_end(info);
+      jw_key(info, "cmd");
+      jw_value_str(info, (char *)vJsonCmd);
+      jw_key(info, (char *)vJsonCmd);
+      jw_begin(info);
+      jw_key(info, "cmd");
+      jw_value_str(info, (char *)vDevCmd);
+      jw_key(info, "id");
+      jw_value_int(info, (int)devId);
+      jw_end(info);
       jw_end(info);
 
       jw_info_stop(info);
@@ -336,19 +336,19 @@ void handleJsonInput () {
       return;
     } else if (streq(vDevCmd, "down")) {
       setDeviceUpState(tunnel, false);
-      
+
       jw_info_start(info);
 
       jw_begin(info);
-        jw_key(info, "cmd");
-        jw_value_str(info, (char *) vJsonCmd);
-        jw_key(info, (char *)vJsonCmd);
-        jw_begin(info);
-          jw_key(info, "cmd");
-          jw_value_str(info, (char *)vDevCmd);
-          jw_key(info, "id");
-          jw_value_int(info, (int)devId);
-        jw_end(info);
+      jw_key(info, "cmd");
+      jw_value_str(info, (char *)vJsonCmd);
+      jw_key(info, (char *)vJsonCmd);
+      jw_begin(info);
+      jw_key(info, "cmd");
+      jw_value_str(info, (char *)vDevCmd);
+      jw_key(info, "id");
+      jw_value_int(info, (int)devId);
+      jw_end(info);
       jw_end(info);
 
       jw_info_stop(info);
@@ -357,19 +357,19 @@ void handleJsonInput () {
       return;
     } else if (streq(vDevCmd, "destroy")) {
       tuntap_destroy(tunnel);
-      
+
       jw_info_start(info);
 
       jw_begin(info);
-        jw_key(info, "cmd");
-        jw_value_str(info, (char *) vJsonCmd);
-        jw_key(info, (char *)vJsonCmd);
-        jw_begin(info);
-          jw_key(info, "cmd");
-          jw_value_str(info, (char *)vDevCmd);
-          jw_key(info, "id");
-          jw_value_int(info, (int)devId);
-        jw_end(info);
+      jw_key(info, "cmd");
+      jw_value_str(info, (char *)vJsonCmd);
+      jw_key(info, (char *)vJsonCmd);
+      jw_begin(info);
+      jw_key(info, "cmd");
+      jw_value_str(info, (char *)vDevCmd);
+      jw_key(info, "id");
+      jw_value_int(info, (int)devId);
+      jw_end(info);
       jw_end(info);
 
       jw_info_stop(info);
@@ -377,60 +377,58 @@ void handleJsonInput () {
       writeout(info->outputJsonString);
       return;
     } else if (streq(vDevCmd, "sub")) {
-      //TODO - by default we're always sub'd
+      // TODO - by default we're always sub'd
       return;
     } else if (streq(vDevCmd, "unsub")) {
-      //TODO
+      // TODO
       return;
     } else {
       return;
     }
   } else if (streq(vJsonCmd, "data")) {
-
   } else if (streq(vJsonCmd, "die")) {
     doLoop = false;
-    //TODO - respond with ack
+    // TODO - respond with ack
     printf("u die");
     fflush(stdout);
     return;
   }
-  
 
   printf("[json] type '%s' from %s\n", vJsonCmd, jsonBuffer);
-  
-  fflush(stdout); //necessary to let the output flow to process parent
+
+  fflush(stdout);  // necessary to let the output flow to process parent
 }
 
-void ipPrintFromBuffer (unsigned char * data, int dataOffset) {
-  printf(
-    "%u.%u.%u.%u",
-    data[dataOffset],
-    data[dataOffset+1],
-    data[dataOffset+2],
-    data[dataOffset+3]
-  );
+void ipPrintFromBuffer(unsigned char *data, int dataOffset) {
+  printf("%u.%u.%u.%u", data[dataOffset], data[dataOffset + 1],
+         data[dataOffset + 2], data[dataOffset + 3]);
 }
 
-void handleDeviceRead (dev d) {
+void handleDeviceRead(dev d) {
   int readable = tuntap_get_readable(d);
   if (readable < 0) return;
 
   tuntap_read(d, devReadData, readable);
 
-  char * base64 = b64_encode(devReadData, (size_t)readable);
+  char *base64 = b64_encode(devReadData, (size_t)readable);
 
   jw_info_start(info);
   jw_begin(info);
-    jw_key(info, "cmd");
-    jw_value_str(info, "data");
+  jw_key(info, "cmd");
+  jw_value_str(info, "data");
 
-    jw_key(info, "data");
-    jw_begin(info);
-      jw_key(info, "base64");
-      jw_value_str(info, base64);
-    jw_end(info);
+  jw_key(info, "data");
+  jw_begin(info);
+  jw_key(info, "base64");
+  jw_value_str(info, base64);
+  jw_end(info);
   jw_end(info);
   jw_info_stop(info);
+
+  if (jw_info_error(info)) {
+    // TODO - handle this sanely
+  }
+
   writeout(info->outputJsonString);
 
   free(base64);
@@ -444,9 +442,9 @@ void handleDeviceRead (dev d) {
   // fflush(stdout);
 }
 
-void handleDevicesRead () {
+void handleDevicesRead() {
   dev d;
-  for (int i=0; i<nextUnusedDeviceIndex; i++) {
+  for (int i = 0; i < nextUnusedDeviceIndex; i++) {
     if (devPoolStarted[i] == true) {
       d = devPool[i];
       handleDeviceRead(d);
@@ -455,18 +453,17 @@ void handleDevicesRead () {
 }
 
 int main(int argc, char **argv) {
-  //allocation and setup
+  // allocation and setup
   init();
 
-  while(doLoop) {
-    //packets read from tunnel devices (usually there is one device)
+  while (doLoop) {
+    // packets read from tunnel devices (usually there is one device)
     handleDevicesRead();
 
-    //this function can set doLoop to false, breaking the loop
+    // this function can set doLoop to false, breaking the loop
     handleJsonInput();
-
   }
 
-  //clear out any devices and free memory
+  // clear out any devices and free memory
   cleanup();
 }
